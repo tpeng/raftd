@@ -3,12 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/goraft/raft"
-	"github.com/goraft/raftd/command"
-	"github.com/goraft/raftd/server"
 	"log"
 	"math/rand"
 	"os"
+	"raft"
+	"raftd/command"
+	"raftd/server"
 	"time"
 )
 
@@ -16,7 +16,8 @@ var verbose bool
 var trace bool
 var debug bool
 var host string
-var port int
+var httpPort int
+var raftPort int
 var join string
 
 func init() {
@@ -24,7 +25,8 @@ func init() {
 	flag.BoolVar(&trace, "trace", false, "Raft trace debugging")
 	flag.BoolVar(&debug, "debug", false, "Raft debugging")
 	flag.StringVar(&host, "h", "localhost", "hostname")
-	flag.IntVar(&port, "p", 4001, "port")
+	flag.IntVar(&raftPort, "rp", 4001, "raft port")
+	flag.IntVar(&httpPort, "hp", 5001, "http port")
 	flag.StringVar(&join, "join", "", "host:port of leader to join")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [arguments] <data-path> \n", os.Args[0])
@@ -62,6 +64,6 @@ func main() {
 	}
 
 	log.SetFlags(log.LstdFlags)
-	s := server.New(path, host, port)
+	s := server.New(path, host, httpPort, raftPort)
 	log.Fatal(s.ListenAndServe(join))
 }

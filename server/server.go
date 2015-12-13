@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/goraft/raft"
-	"github.com/goraft/raftd/command"
-	"github.com/goraft/raftd/db"
 	"github.com/gorilla/mux"
 	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
 	"path/filepath"
+	"raft"
+	"raftd/command"
+	"raftd/db"
 	"sync"
 	"time"
 )
@@ -22,7 +22,8 @@ import (
 type Server struct {
 	name       string
 	host       string
-	port       int
+	httpPort   int
+	raftPort   int
 	path       string
 	router     *mux.Router
 	raftServer raft.Server
@@ -32,13 +33,14 @@ type Server struct {
 }
 
 // Creates a new server.
-func New(path string, host string, port int) *Server {
+func New(path string, host string, httpPort int, raftPort int) *Server {
 	s := &Server{
-		host:   host,
-		port:   port,
-		path:   path,
-		db:     db.New(),
-		router: mux.NewRouter(),
+		host:     host,
+		httpPort: httpPort,
+		raftPort: raftPort,
+		path:     path,
+		db:       db.New(),
+		router:   mux.NewRouter(),
 	}
 
 	// Read existing name or generate a new one.
@@ -56,7 +58,7 @@ func New(path string, host string, port int) *Server {
 
 // Returns the connection string.
 func (s *Server) connectionString() string {
-	return fmt.Sprintf("http://%s:%d", s.host, s.port)
+	return fmt.Sprintf("%s:%d", s.host, s.raftPort)
 }
 
 // Starts the server.
@@ -66,8 +68,8 @@ func (s *Server) ListenAndServe(leader string) error {
 	log.Printf("Initializing Raft Server: %s", s.path)
 
 	// Initialize and start Raft server.
-	transporter := raft.NewHTTPTransporter("/raft", 200*time.Millisecond)
-	s.raftServer, err = raft.NewServer(s.name, s.path, transporter, nil, s.db, "")
+	transporter := raft.NewGRPCTransporter("/raft", 200*time.Millisecond)
+	s.raftServer, err = raft.NewServer(s.name, s.path, transporter, nil, s.db, "", s.raftPort)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,7 +109,7 @@ func (s *Server) ListenAndServe(leader string) error {
 
 	// Initialize and start HTTP server.
 	s.httpServer = &http.Server{
-		Addr:    fmt.Sprintf(":%d", s.port),
+		Addr:    fmt.Sprintf(":%d", s.httpPort),
 		Handler: s.router,
 	}
 
@@ -145,6 +147,7 @@ func (s *Server) Join(leader string) error {
 }
 
 func (s *Server) joinHandler(w http.ResponseWriter, req *http.Request) {
+
 	command := &raft.DefaultJoinCommand{}
 
 	if err := json.NewDecoder(req.Body).Decode(&command); err != nil {
